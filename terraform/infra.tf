@@ -30,6 +30,8 @@ resource "aws_nat_gateway" "ngw" {
   subnet_id = "${aws_subnet.public_subnet_a.id}"
 }
 
+#Create a public subnets in the three AWS us-west-2 regions
+$Uses /24 CIDR
 resource "aws_subnet" "public_subnet_a" {
     vpc_id = "${var.vpc_id}"
     cidr_block = "172.31.0.0/24"
@@ -60,7 +62,8 @@ resource "aws_subnet" "public_subnet_c" {
   }
 }
 
-#The private subnets using /22 CIDR
+#Create private subnets in the three AWS us-west-2 regions
+#Uses /22 CIDR
 resource "aws_subnet" "private_subnet_a"{
   vpc_id = "${var.vpc_id}"
   cidr_block = "172.31.4.0/22"
@@ -91,7 +94,8 @@ resource "aws_subnet" "private_subnet_c"{
   }
 }
 
-
+#Create a public routing table for public subnets
+#to connect to the internet gateway
 resource "aws_route_table" "public_routing_table" {
   vpc_id = "${var.vpc_id}"
   route {
@@ -104,6 +108,8 @@ resource "aws_route_table" "public_routing_table" {
   }
 }
 
+#Create a private routing table for private subnets to
+# connect to the NAT gateway
 resource "aws_route_table" "private_routing_table" {
   vpc_id = "${var.vpc_id}"
   route {
@@ -147,7 +153,8 @@ resource "aws_route_table_association" "private_subnet_c_rt_assoc" {
   route_table_id = "${aws_route_table.private_routing_table.id}"
 }
 
-#The security group to allow SSH
+#The security group to allow SSH and only allow IP's from a certain
+#CIDR block.
 resource "aws_security_group" "ssh" {
   name = "cit360_example"
   vpc_id = "${var.vpc_id}"
@@ -156,6 +163,7 @@ resource "aws_security_group" "ssh" {
     from_port = 22
     to_port = 22
     protocol = "tcp"
+    #The IP block that is allowed to connect
     cidr_blocks = ["204.152.207.194/24"]
   }
 
@@ -166,6 +174,7 @@ resource "aws_security_group" "ssh" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
 #The instance to be launched on a public subnet
 resource "aws_instance" "cit360_example" {
   ami = "ami-5ec1673e"
