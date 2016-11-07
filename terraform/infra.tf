@@ -31,7 +31,7 @@ resource "aws_nat_gateway" "ngw" {
 }
 
 #Create a public subnets in the three AWS us-west-2 regions
-$Uses /24 CIDR
+#Uses /24 CIDR
 resource "aws_subnet" "public_subnet_a" {
     vpc_id = "${var.vpc_id}"
     cidr_block = "172.31.0.0/24"
@@ -164,7 +164,7 @@ resource "aws_security_group" "ssh" {
     to_port = 22
     protocol = "tcp"
     #The IP block that is allowed to connect
-    cidr_blocks = ["204.152.207.194/24"]
+    cidr_blocks = ["69.12.80.162/24"]
   }
 
   egress {
