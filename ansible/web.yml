@@ -5,9 +5,9 @@
     service_name: curriculum
     service_version: 1.0
     app_env: test
-    db_host: localhost
+    db_host: db-cit360.cny8wymh5igb.us-west-2.rds.amazonaws.com
     db_database: curriculum
-    db_username: curriculum
+    db_username: jlopez
     db_port: 3306
     service_dir: /usr/share/nginx/{{ service_name }}
   vars_files:
