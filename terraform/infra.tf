@@ -1,8 +1,3 @@
-# Add your VPC ID to default below
-variable "vpc_id" {
-  description = "VPC ID for usage throughout the build process"
-  default = "vpc-9bc4d7ff"
-}
 
 #Set the provider region
 provider "aws" {
@@ -28,6 +23,7 @@ resource "aws_eip" "nat" {
 resource "aws_nat_gateway" "ngw" {
   allocation_id = "${aws_eip.nat.id}"
   subnet_id = "${aws_subnet.public_subnet_a.id}"
+
 }
 
 #Create a public subnets in the three AWS us-west-2 regions
@@ -155,8 +151,8 @@ resource "aws_route_table_association" "private_subnet_c_rt_assoc" {
 
 #The security group to allow SSH and only allow IP's from a certain
 #CIDR block.
-resource "aws_security_group" "ssh" {
-  name = "cit360_example"
+resource "aws_security_group" "ssh_public" {
+  name = "cit360-example"
   vpc_id = "${var.vpc_id}"
 
   ingress {
@@ -164,7 +160,7 @@ resource "aws_security_group" "ssh" {
     to_port = 22
     protocol = "tcp"
     #The IP block that is allowed to connect
-    cidr_blocks = ["69.12.80.162/24"]
+    cidr_blocks = ["173.254.218.250/24"]
   }
 
   egress {
@@ -173,18 +169,172 @@ resource "aws_security_group" "ssh" {
     protocol = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags {
+    Name = "Allow SSH"
+  }
 }
 
-#The instance to be launched on a public subnet
-resource "aws_instance" "cit360_example" {
-  ami = "ami-5ec1673e"
+#Security group for the web servers
+resource "aws_security_group" "web_server_sg" {
+  name = "web-server"
+  vpc_id = "${var.vpc_id}"
+
+  ingress {
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    cidr_blocks = ["${var.vpc_cidr}"]
+  }
+
+  ingress {
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["${var.vpc_cidr}"]
+  }
+
+  egress {
+  from_port = 0
+  to_port = 0
+  protocol = "-1"
+  cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags {
+    Name = "web_sever_security_group"
+  }
+}
+
+#ELB security group
+resource "aws_security_group" "elb_sg" {
+  name = "elb-sg"
+  vpc_id = "${var.vpc_id}"
+
+  ingress {
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+  from_port = 0
+  to_port = 0
+  protocol = "-1"
+  cidr_blocks = ["0.0.0.0/0"]
+  }
+
+}
+
+resource "aws_instance" "controller" {
+  ami = "ami-0d57f56d"
   instance_type = "t2.micro"
   subnet_id = "${aws_subnet.public_subnet_a.id}"
   associate_public_ip_address = true
   key_name = "cit360"
-  vpc_security_group_ids = ["${aws_security_group.ssh.id}"]
+  vpc_security_group_ids = ["${aws_security_group.ssh_public.id}"]
 
   tags {
-    Name = "CIT360_Example_Instance"
+    Name = "controller"
+  }
+}
+
+#The security group for the RDS, allows access from within the VPC
+resource "aws_security_group" "rds_sg" {
+  name = "rds-sg"
+
+  ingress {
+    from_port = 3306
+    to_port = 3306
+    protocol = "tcp"
+    cidr_blocks = ["${var.vpc_cidr}"]
+  }
+}
+
+#The subnet group for the DB, accociated with 2 private subnets
+resource "aws_db_subnet_group" "cit360_db_group" {
+  name = "main"
+  subnet_ids = ["${aws_subnet.private_subnet_a.id}", "${aws_subnet.private_subnet_b.id}"]
+
+  tags {
+    Name = "cit360 db_subnet_group"
+  }
+}
+
+#The db instance
+resource "aws_db_instance" "cit360_db" {
+  identifier = "db-cit360"
+  allocated_storage = 5
+  engine = "mariadb"
+  engine_version = "10.0.24"
+  instance_class = "db.t2.micro"
+  multi_az = false
+  name = "db_1"
+  username = "jlopez"
+  password = "${var.password}"
+  db_subnet_group_name = "${aws_db_subnet_group.cit360_db_group.id}"
+  vpc_security_group_ids = ["${aws_security_group.rds_sg.id}"]
+
+  tags {
+    Name = "cit360_db"
+  }
+}
+
+#Elastic load balancer for the webservers
+resource "aws_elb" "cit360_elb" {
+  name = "cit360-elb"
+  subnets = ["${aws_subnet.public_subnet_b.id}", "${aws_subnet.public_subnet_c.id}"]
+
+  listener {
+    instance_port = 80
+    instance_protocol = "http"
+    lb_port = 80
+    lb_protocol = "http"
+  }
+
+  health_check {
+    healthy_threshold = 2
+    unhealthy_threshold = 2
+    timeout = 5
+    target = "HTTP:80/"
+    interval = 30
+  }
+
+  instances = ["${aws_instance.webserver-b.id}", "${aws_instance.webserver-c.id}"]
+  connection_draining = true
+  connection_draining_timeout = 60
+  security_groups = ["${aws_security_group.elb_sg.id}"]
+
+  tags {
+    Name = "Load balancer"
+  }
+}
+
+resource "aws_instance" "webserver-b" {
+  ami = "ami-d2c924b2"
+  instance_type = "t2.micro"
+  subnet_id = "${aws_subnet.private_subnet_b.id}"
+  associate_public_ip_address = false
+  key_name = "cit360"
+  vpc_security_group_ids = ["${aws_security_group.web_server_sg.id}"]
+
+  tags {
+    Name = "webserver-b"
+    Service = "curriculum"
+  }
+}
+
+resource "aws_instance" "webserver-c" {
+  ami = "ami-d2c924b2"
+  instance_type = "t2.micro"
+  subnet_id = "${aws_subnet.private_subnet_c.id}"
+  associate_public_ip_address = false
+  key_name = "cit360"
+  vpc_security_group_ids = ["${aws_security_group.web_server_sg.id}"]
+
+  tags {
+    Name = "webserver-c"
+    Service = "curriculum"
   }
 }
