@@ -160,7 +160,7 @@ resource "aws_security_group" "ssh_public" {
     to_port = 22
     protocol = "tcp"
     #The IP block that is allowed to connect
-    cidr_blocks = ["173.254.218.250/24"]
+    cidr_blocks = ["199.229.250.114/24"]
   }
 
   egress {
@@ -228,7 +228,7 @@ resource "aws_security_group" "elb_sg" {
 }
 
 resource "aws_instance" "controller" {
-  ami = "ami-0d57f56d"
+  ami = "ami-5ec1673e"
   instance_type = "t2.micro"
   subnet_id = "${aws_subnet.public_subnet_a.id}"
   associate_public_ip_address = true
